@@ -7,6 +7,7 @@ import ChatDialog from "@/components/ChatDialog";
 import DatePicker from "@/components/DatePicker";
 import MapView from "@/components/MapView";
 import AuthImage from "@/components/AuthImage";
+import BannerCarousel from "@/components/BannerCarousel";
 import { StatusBadge, StarRating } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -85,6 +86,7 @@ function SearchSection() {
 
   return (
     <div className="space-y-6">
+      <BannerCarousel />
       <Card className="p-5 md:p-6 border-slate-200">
         <div className="grid md:grid-cols-2 gap-4">
           <div>
@@ -333,9 +335,9 @@ function PayDialog({ order, onClose, onDone }) {
           ))}
         </div>
         {metode === "qris" && (
-          <div className="rounded-xl bg-slate-50 p-4 text-center">
-            <img alt="QRIS" className="mx-auto h-40 w-40" src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=HOMECARE-QRIS-PAYMENT" />
-            <p className="text-xs text-slate-500 mt-2">Pindai QRIS ini dengan aplikasi pembayaran Anda (simulasi).</p>
+          <div className="rounded-xl bg-white border border-slate-200 p-3 text-center">
+            <img alt="QRIS Statis HomeCare" data-testid="qris-static-img" className="mx-auto w-full max-w-[280px] rounded-lg" src="/qris-static.jpeg" />
+            <p className="text-xs text-slate-500 mt-2">Pindai QRIS di atas dengan aplikasi bank/e-wallet Anda, lalu tekan "Konfirmasi Pembayaran". Admin akan memverifikasi.</p>
           </div>
         )}
         {metode === "cash" && <p className="text-sm text-slate-500 rounded-xl bg-slate-50 p-4">Bayar tunai langsung kepada nakes saat kunjungan. Admin akan memverifikasi pembayaran.</p>}

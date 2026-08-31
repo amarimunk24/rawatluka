@@ -1,0 +1,57 @@
+{
+  "summary": "Iteration 3 testing of the three new features (PDF-with-photo export, Admin Iklan/Banner CRUD + role-targeted display, static QRIS image) plus regression. Backend: new suite /app/backend/tests/test_banners_pdf_qris.py (18 tests, 17 pass) covering /qris-static.jpeg asset, admin banner create/list/update/toggle/delete + persistence, role targeting & inactive filtering on GET /api/banners (patient vs nakes), auth/role guards (401 unauth, 403 non-admin), medical-record PDF (200 application/pdf, %PDF- header, /Image XObject embedded, 278KB, ?auth= query variant, 401 without token, 404 unknown order, cross-patient IDOR blocked 403/404) and corrupt-image resilience (garbage .png attached to a real record still renders a valid PDF, no 500). Frontend: admin Iklan/Banner UI fully works (nav-iklan, add-banner-btn, banner-judul, banner-file upload, banner-target select, banner-save, grid banner-item, pencil edit persists, banner-toggle-* on/off persists, banner-del-* deletes). Patient QRIS flow works (order-pay -> pay-qris -> qris-static-img src=/qris-static.jpeg naturalWidth=1136 -> pay-confirm -> 'Menunggu verifikasi admin', admin verify-payment moves it to Lunas). Patient 'Unduh PDF' downloaded rekam-medis-*.pdf, 278KB, %PDF header, with 'Dokumentasi Foto' rendered in the dialog. Regression OK: search returns 11 providers with 12 leaflet markers, booking dialog validates missing date, nakes accept-order -> route-btn appears with correct Google Maps dir href, SOAP with photo upload submits and marks 'Rekam medis selesai', admin payment verification works. CRITICAL DEFECT FOUND: banner images return 403 from GET /api/files for BOTH patient and nakes, so every banner renders as a broken image (alt text only) on both dashboards.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/files/{path} (banner images)", "issue": "Banner images are uploaded by the ADMIN, so serve_file's authorization (owner_id == caller, admin, or patient owning a medical record referencing the file) rejects every patient/nakes request with 403. Verified by curl and in-browser: patient and nakes /banners returns the banner metadata but each gambar_url gives 403 -> BannerCarousel and admin-uploaded banner art render as broken images (naturalWidth 0) on /pasien Beranda and /nakes Ringkasan. Fix: allow any authenticated user to read a file that is referenced by an existing banner (e.g. db.banners.find_one({'gambar_url': path})) or mark banner uploads public.", "priority": "CRITICAL"}
+    ],
+    "minor": [
+      {"endpoint": "PUT /api/admin/banners/{bid}", "issue": "Unknown id returns 200 with body 'null' instead of 404 (update_one matches nothing, clean(None) returned). Test test_update_unknown_banner fails."},
+      {"endpoint": "DELETE /api/admin/banners/{bid}", "issue": "Always returns {ok:true} even when no document was deleted (no 404 on unknown id)."},
+      {"endpoint": "POST /api/upload", "issue": "Only the file extension is validated; a file with .png extension containing garbage bytes is accepted and stored, later rendering as a broken <img> in the banner grid/carousel. Consider verifying the image with PIL on upload."},
+      {"endpoint": "GET /api/banners", "issue": "No pagination/limit exposed and no 'urutan'/priority field, so carousel order is only created_at desc (acceptable, informational)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "BannerCarousel (patient Beranda / nakes Ringkasan)", "issue": "Banners show only the title over a broken image because AuthImage requests return 403 (see backend critical). Also there is no onError fallback/placeholder, so the browser's broken-image alt text is displayed.", "selector": "[data-testid=\"banner-carousel\"] img", "priority": "CRITICAL"},
+      {"component": "AdminDashboard Iklan edit button", "issue": "Pencil (edit) button has aria-label='Edit iklan' but no data-testid, unlike banner-toggle-*/banner-del-* — add banner-edit-{id} for consistency.", "selector": "[data-testid=\"banner-item\"] button[aria-label=\"Edit iklan\"]", "priority": "LOW"},
+      {"component": "BannerCarousel", "issue": "Named a 'carousel' but is a plain horizontally scrollable flex row with no prev/next controls, dots, autoplay or keyboard affordance; on desktop with 1-2 banners it leaves a large empty area to the right.", "selector": "[data-testid=\"banner-carousel\"]", "priority": "LOW"}
+    ],
+    "integration_issues": [
+      {"flow": "Banner display to end users", "issue": "GET /api/banners succeeds and filtering is correct, but the image fetch (/api/files/...?auth=) 403s for patient and nakes, breaking the whole feature visually.", "affected_selectors": ["[data-testid=\"banner-carousel\"]"]}
+    ],
+    "design_issues": [
+      {"screen": "Admin Iklan / Banner grid", "issues": ["Inactive banner uses a white/70 overlay with slate-500 'Nonaktif' text over the image — low contrast on light images", "Banner card image (h-36, object-cover) overflows/appears bleed beyond the card's rounded corners for wide images"]},
+      {"screen": "Patient payment dialog (QRIS)", "issues": ["Static QR does not encode the order amount (documented mock) — the amount is only in the dialog title; consider a clearer note that the nominal must be typed manually"]},
+      {"screen": "Patient search results", "issues": ["Still polluted with 11 leftover 'TEST ...' nakes / duplicate providers from earlier automated runs (carried over from iterations 1-2)"]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_banners_pdf_qris.py",
+    "/app/test_reports/pytest/iter3_banners_pdf.xml"
+  ],
+  "action_items": [
+    "CRITICAL: allow authenticated patients/nakes to fetch banner images in GET /api/files/{path} (whitelist paths referenced by a banner document, or store banners as public assets). Right now every banner renders broken for end users.",
+    "Return 404 from PUT/DELETE /api/admin/banners/{bid} when the id does not exist (PUT currently returns 200 null).",
+    "Validate uploaded images server-side (PIL open) so corrupt files with an image extension are rejected at upload time.",
+    "Add data-testid=banner-edit-{id} to the pencil button and an onError placeholder in BannerCarousel/AuthImage.",
+    "Optional: real carousel affordances (arrows/dots) and cleanup of the leftover TEST nakes/service seed pollution."
+  ],
+  "critical_code_review_comments": [
+    "serve_file authorization list omits banner images (admin-owned files that must be world-readable to logged-in users) — a whitelist based on the referencing document is needed, otherwise every new admin-uploaded asset type will break the same way.",
+    "update_banner/delete_banner do not check matched_count/deleted_count; clean(None) silently returns null with HTTP 200.",
+    "_build_pdf photo handling is solid (PIL validate + convert + skip on exception) and record_pdf swallows storage errors per attachment — verified no 500 with a corrupt attachment.",
+    "server.py is now 1100 lines; splitting into routers (auth, orders, files, banners, admin) is overdue.",
+    "BannerCarousel has no loading/error state and swallows the /banners error with .catch(() => {})."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_banners_pdf_qris.py (new: 18 tests for banners, PDF-with-photo, QRIS asset, corrupt-image resilience)"
+  ],
+  "success_rate": {"backend": "94% (17/18; the 1 failure is the real PUT-unknown-banner 200-instead-of-404 bug)", "frontend": "80% (admin banner CRUD, QRIS static payment, PDF download, regression flows pass; banner IMAGE display to patient/nakes fails with 403)"},
+  "seed_data_creation": "Created and then deleted 3 admin banners ('UI TEST Banner Semua' all/active, 'UI TEST Banner Nakes' nakes/active, 'UI TEST Banner Nonaktif' all/inactive) via UI; pytest banners are auto-cleaned. Also: accepted one pending nakes order and submitted a SOAP record with an uploaded photo (patient 'P1'), submitted a QRIS payment for siti@pasien.id order 'PDF test' and verified it as admin, and registered TEST_pdfidor@example.com for the IDOR check.",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "admin@homecare.id/admin123, siti@pasien.id/pasien123, budi@nakes.id/nakes123 (all valid; 5-fail/300s lockout still active)",
+  "context_for_next_testing_agent": "Login route is /login (not /masuk). Run backend suites ONE FILE AT A TIME with -n 0. New suite: tests/test_banners_pdf_qris.py. Reusable valid test images written at /tmp/ui_banner.png and /tmp/ui_banner_nakes.png (do NOT use a hand-written tiny base64 PNG — an invalid one produced false 'broken image' findings). SOAP dialog requires soap-keluhan, soap-td, soap-nadi AND soap-suhu, else validation toast blocks submit. After the /api/files banner-authorization fix, re-verify banner images load (naturalWidth>0) on /pasien Beranda and /nakes Ringkasan and that inactive/other-role banners stay hidden.",
+  "rca_of_the_issue": "Banner images 403: GET /api/files/{path} authorizes only (a) admins, (b) the uploader (owner_id), or (c) a patient whose medical_record.attachments contains the path. Banner artwork is uploaded by the admin account, so for a patient/nakes caller none of the three branches match and the endpoint raises 403 'Akses ditolak'. Reproduction: admin creates an active banner with target 'all'; login as siti@pasien.id -> /pasien Beranda shows [data-testid=banner-carousel] with the title but the <img> is broken and the network log shows 403 for /api/files/homecare-id/uploads/user_<admin>/<uuid>.png. Same for budi@nakes.id. Mitigation (developer): add `or await db.banners.find_one({'gambar_url': path})` to the allowed check (or a public-asset flag on the files record)."
+}

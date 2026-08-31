@@ -20,11 +20,12 @@ import bcrypt
 import jwt
 import requests
 import io
+from PIL import Image as PILImage
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.units import mm
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage
 
 # ---------------- DB ----------------
 mongo_url = os.environ['MONGO_URL']
@@ -294,6 +295,14 @@ class ServiceReq(BaseModel):
     tarif_dasar: float
 
 
+class BannerReq(BaseModel):
+    judul: str
+    gambar_url: str
+    link_url: Optional[str] = None
+    target: str = "all"  # all | patient | nakes
+    status_aktif: bool = True
+
+
 # ---------------- Auth ----------------
 @api.post("/auth/register")
 async def register(req: RegisterReq):
@@ -465,6 +474,11 @@ async def upload_file(file: UploadFile = File(...), user: dict = Depends(get_cur
     data = await file.read()
     if len(data) > 8 * 1024 * 1024:
         raise HTTPException(400, "Ukuran file maksimal 8MB")
+    if ext != "pdf":
+        try:
+            PILImage.open(io.BytesIO(data)).verify()
+        except Exception:
+            raise HTTPException(400, "File gambar rusak atau tidak valid")
     path = f"{APP_NAME}/uploads/{user['id']}/{uuid.uuid4().hex}.{ext}"
     ctype = file.content_type or MIME_TYPES.get(ext, "application/octet-stream")
     try:
@@ -499,8 +513,11 @@ async def serve_file(path: str, authorization: str = Header(None), auth: str = Q
     record = await db.files.find_one({"storage_path": path, "is_deleted": False})
     if not record:
         raise HTTPException(404, "File tidak ditemukan")
-    # Authorization: owner (uploader), admin, or the patient of a medical record that references this file
+    # Authorization: owner (uploader), admin, banner artwork (public to logged-in users),
+    # or the patient of a medical record that references this file
     allowed = reqer["role"] == "admin" or record.get("owner_id") == reqer["id"]
+    if not allowed and await db.banners.find_one({"gambar_url": path}):
+        allowed = True
     if not allowed and reqer["role"] == "patient":
         pat = await db.patients.find_one({"user_id": reqer["id"]})
         if pat and await db.medical_records.find_one({"attachments": path, "patient_id": pat["id"]}):
@@ -701,7 +718,7 @@ async def patient_records(user: dict = Depends(require_role("patient"))):
     return recs
 
 
-def _build_pdf(rec: dict, pasien_nama: str, nakes_nama: str) -> bytes:
+def _build_pdf(rec: dict, pasien_nama: str, nakes_nama: str, photos: list = None) -> bytes:
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=18 * mm, bottomMargin=18 * mm,
                             leftMargin=18 * mm, rightMargin=18 * mm, title="Rekam Medis")
@@ -772,6 +789,26 @@ def _build_pdf(rec: dict, pasien_nama: str, nakes_nama: str) -> bytes:
     if rec.get("catatan_tambahan"):
         el.append(Paragraph("Catatan Tambahan", sect))
         el.append(Paragraph(rec["catatan_tambahan"], body))
+    if photos:
+        valid = []
+        for pb in photos:
+            try:
+                im = PILImage.open(io.BytesIO(pb))
+                im.load()
+                if im.mode not in ("RGB", "L"):
+                    im = im.convert("RGB")
+                out = io.BytesIO()
+                im.save(out, format="JPEG", quality=80)
+                valid.append((out.getvalue(), im.size))
+            except Exception:
+                continue
+        if valid:
+            el.append(Paragraph("Dokumentasi Foto Luka", sect))
+            for data, (iw, ih) in valid:
+                w = 70 * mm
+                h = w * ih / iw
+                el.append(RLImage(io.BytesIO(data), width=w, height=h))
+                el.append(Spacer(1, 6))
     el.append(Spacer(1, 18))
     el.append(Paragraph("Dokumen ini dibuat otomatis oleh sistem HomeCare.id dan sah tanpa tanda tangan basah.", label))
     doc.build(el)
@@ -798,7 +835,16 @@ async def record_pdf(oid: str, authorization: str = Header(None), auth: str = Qu
     pu = await db.users.find_one({"id": pat["user_id"]}, {"_id": 0}) if pat else None
     nak = await db.nakes.find_one({"id": rec["nakes_id"]})
     nu = await db.users.find_one({"id": nak["user_id"]}, {"_id": 0}) if nak else None
-    pdf = await run_in_threadpool(_build_pdf, rec, pu["nama_lengkap"] if pu else "-", nu["nama_lengkap"] if nu else "-")
+    photos = []
+    for path in (rec.get("attachments") or []):
+        if path.lower().endswith(".pdf"):
+            continue
+        try:
+            data, _ = await run_in_threadpool(get_object, path)
+            photos.append(data)
+        except Exception:
+            continue
+    pdf = await run_in_threadpool(_build_pdf, rec, pu["nama_lengkap"] if pu else "-", nu["nama_lengkap"] if nu else "-", photos)
     return Response(content=pdf, media_type="application/pdf",
                     headers={"Content-Disposition": f'attachment; filename="rekam-medis-{oid}.pdf"'})
 
@@ -966,6 +1012,43 @@ async def create_service(req: ServiceReq, user: dict = Depends(require_role("adm
            "deskripsi": req.deskripsi, "tarif_dasar": req.tarif_dasar, "status_aktif": True}
     await db.services.insert_one(doc)
     return clean(doc)
+
+
+# ---------------- Banners / Ads ----------------
+@api.get("/banners")
+async def list_banners(user: dict = Depends(get_current_user)):
+    q = {"status_aktif": True, "target": {"$in": ["all", user["role"]]}}
+    return await db.banners.find(q, {"_id": 0}).sort("created_at", -1).to_list(50)
+
+
+@api.get("/admin/banners")
+async def admin_banners(user: dict = Depends(require_role("admin"))):
+    return await db.banners.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
+
+
+@api.post("/admin/banners")
+async def create_banner(req: BannerReq, user: dict = Depends(require_role("admin"))):
+    doc = {"id": new_id("ban"), "judul": req.judul, "gambar_url": req.gambar_url,
+           "link_url": req.link_url, "target": req.target, "status_aktif": req.status_aktif,
+           "created_at": now_iso()}
+    await db.banners.insert_one(doc)
+    return clean(doc)
+
+
+@api.put("/admin/banners/{bid}")
+async def update_banner(bid: str, req: BannerReq, user: dict = Depends(require_role("admin"))):
+    res = await db.banners.update_one({"id": bid}, {"$set": req.dict()})
+    if res.matched_count == 0:
+        raise HTTPException(404, "Iklan tidak ditemukan")
+    return clean(await db.banners.find_one({"id": bid}))
+
+
+@api.delete("/admin/banners/{bid}")
+async def delete_banner(bid: str, user: dict = Depends(require_role("admin"))):
+    res = await db.banners.delete_one({"id": bid})
+    if res.deleted_count == 0:
+        raise HTTPException(404, "Iklan tidak ditemukan")
+    return {"ok": True}
 
 
 # ---------------- Startup seed ----------------

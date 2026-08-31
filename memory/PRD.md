@@ -39,5 +39,12 @@ Auth & roles · provider search by radius/service/rating · booking with schedul
 - WhatsApp (Twilio) — awaiting Account SID, Auth Token, WhatsApp sender.
 - Real QRIS (Midtrans Snap `other_qris` + webhook) — awaiting Sandbox Server Key & Client Key; webhook will be {BACKEND}/api/payments/midtrans/webhook.
 
+## Iteration 4 (2026-06) — added
+- **Foto luka di PDF**: medical-record PDF now embeds wound/documentation photos (PIL-validated & normalized; corrupt images skipped, no 500).
+- **Menu Iklan/Banner (admin)**: CRUD banners (image upload, judul, link, target all/patient/nakes, active toggle) at /admin → Iklan; displayed via BannerCarousel on patient Beranda & nakes Ringkasan (role-targeted, inactive hidden).
+- **QRIS statis**: real merchant QR image (/qris-static.jpeg) shown in patient QRIS payment dialog.
+- Fixes: /api/files now authorizes banner artwork for all logged-in users; PUT/DELETE /admin/banners return 404 on unknown id; POST /api/upload validates image bytes with PIL (rejects corrupt); AuthImage has broken-image fallback; cleaned 58 leftover TEST accounts.
+- Verified via curl: banner img 200 for patient, 404s correct, corrupt upload 400, PDF-with-photo 278KB /Image embedded.
+
 ## Notes
 - MOCKED: payments (QRIS/Cash simulated), geolocation (manual coordinates + haversine). No real money or GPS map.

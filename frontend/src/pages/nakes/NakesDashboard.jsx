@@ -8,6 +8,7 @@ import DatePicker from "@/components/DatePicker";
 import FileUpload from "@/components/FileUpload";
 import AuthImage from "@/components/AuthImage";
 import MapView from "@/components/MapView";
+import BannerCarousel from "@/components/BannerCarousel";
 import { StatusBadge, EmptyState } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -79,6 +80,7 @@ function Overview() {
   return (
     <div>
       <VerifBanner />
+      <BannerCarousel />
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((s) => (
           <Card key={s.label} className="p-5 border-slate-200" data-testid="stat-card">

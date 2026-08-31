@@ -4,6 +4,8 @@ import api, { apiError, formatRupiah, formatTanggal, formatTanggalOnly } from "@
 import DashboardShell from "@/components/DashboardShell";
 import { StatusBadge, EmptyState } from "@/components/common";
 import AuthImage from "@/components/AuthImage";
+import FileUpload from "@/components/FileUpload";
+import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,7 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   LayoutDashboard, ShieldCheck, Receipt, Stethoscope, Users, Loader2,
-  Check, X, Wallet, TrendingUp, UserCheck, ClipboardList, Eye, Plus,
+  Check, X, Wallet, TrendingUp, UserCheck, ClipboardList, Eye, Plus, Megaphone, Trash2, Pencil,
 } from "lucide-react";
 
 const NAV = [
@@ -22,9 +24,10 @@ const NAV = [
   { key: "verifikasi", label: "Verifikasi Nakes", icon: ShieldCheck },
   { key: "transaksi", label: "Transaksi", icon: Receipt },
   { key: "layanan", label: "Kelola Layanan", icon: Stethoscope },
+  { key: "iklan", label: "Iklan / Banner", icon: Megaphone },
   { key: "pasien", label: "Data Pasien", icon: Users },
 ];
-const TITLES = { ringkasan: "Ringkasan Platform", verifikasi: "Verifikasi Tenaga Kesehatan", transaksi: "Transaksi & Pembayaran", layanan: "Kelola Layanan", pasien: "Data Pasien" };
+const TITLES = { ringkasan: "Ringkasan Platform", verifikasi: "Verifikasi Tenaga Kesehatan", transaksi: "Transaksi & Pembayaran", layanan: "Kelola Layanan", iklan: "Iklan / Banner Dashboard", pasien: "Data Pasien" };
 
 export default function AdminDashboard() {
   const [active, setActive] = useState("ringkasan");
@@ -34,8 +37,81 @@ export default function AdminDashboard() {
       {active === "verifikasi" && <Verifikasi />}
       {active === "transaksi" && <Transaksi />}
       {active === "layanan" && <Layanan />}
+      {active === "iklan" && <Iklan />}
       {active === "pasien" && <Pasien />}
     </DashboardShell>
+  );
+}
+
+function Iklan() {
+  const [banners, setBanners] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+  const [edit, setEdit] = useState(null);
+  const empty = { judul: "", gambar_url: "", link_url: "", target: "all", status_aktif: true };
+  const [f, setF] = useState(empty);
+  const load = useCallback(async () => { setLoading(true); const { data } = await api.get("/admin/banners"); setBanners(data); setLoading(false); }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const openNew = () => { setEdit(null); setF(empty); setOpen(true); };
+  const openEdit = (b) => { setEdit(b); setF({ judul: b.judul, gambar_url: b.gambar_url, link_url: b.link_url || "", target: b.target, status_aktif: b.status_aktif }); setOpen(true); };
+  const save = async () => {
+    if (!f.judul || !f.gambar_url) return toast.error("Isi judul & unggah gambar iklan");
+    try {
+      if (edit) await api.put(`/admin/banners/${edit.id}`, f);
+      else await api.post("/admin/banners", f);
+      toast.success("Iklan tersimpan"); setOpen(false); load();
+    } catch (e) { toast.error(apiError(e.response?.data?.detail)); }
+  };
+  const remove = async (id) => { await api.delete(`/admin/banners/${id}`); toast.success("Iklan dihapus"); load(); };
+  const toggle = async (b) => { await api.put(`/admin/banners/${b.id}`, { ...b, status_aktif: !b.status_aktif }); load(); };
+
+  return (
+    <div>
+      <div className="flex justify-end mb-4"><Button onClick={openNew} data-testid="add-banner-btn" className="rounded-full bg-emerald-600 hover:bg-emerald-700 text-white"><Plus className="h-4 w-4" /> Tambah Iklan</Button></div>
+      {loading ? <Loader2 className="h-6 w-6 animate-spin text-emerald-600" /> : banners.length === 0 ? <EmptyState icon={Megaphone} text="Belum ada iklan. Tambahkan banner untuk ditampilkan di dashboard pengguna." /> : (
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {banners.map((b) => (
+            <Card key={b.id} className="overflow-hidden border-slate-200" data-testid="banner-item">
+              <div className="relative h-36 bg-slate-100">
+                <AuthImage path={b.gambar_url} alt={b.judul} className="h-full w-full object-cover" />
+                {!b.status_aktif && <div className="absolute inset-0 bg-white/70 grid place-items-center text-slate-500 font-semibold text-sm">Nonaktif</div>}
+              </div>
+              <div className="p-4">
+                <div className="font-heading font-bold text-slate-900">{b.judul}</div>
+                <div className="text-xs text-slate-500 mt-1">Target: {b.target === "all" ? "Semua" : b.target === "patient" ? "Pasien" : "Nakes"}</div>
+                <div className="mt-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2"><Switch checked={b.status_aktif} onCheckedChange={() => toggle(b)} data-testid={`banner-toggle-${b.id}`} /><span className="text-xs text-slate-500">{b.status_aktif ? "Aktif" : "Nonaktif"}</span></div>
+                  <div className="flex gap-1">
+                    <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openEdit(b)} aria-label="Edit iklan" data-testid={`banner-edit-${b.id}`}><Pencil className="h-4 w-4 text-slate-500" /></Button>
+                    <Button size="icon" variant="ghost" className="h-8 w-8 text-red-500" onClick={() => remove(b.id)} aria-label="Hapus iklan" data-testid={`banner-del-${b.id}`}><Trash2 className="h-4 w-4" /></Button>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>{edit ? "Edit Iklan" : "Tambah Iklan"}</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div><Label>Judul</Label><Input value={f.judul} onChange={(e) => setF({ ...f, judul: e.target.value })} className="mt-1.5 h-11 rounded-xl" data-testid="banner-judul" /></div>
+            <div><Label>Gambar Iklan</Label><div className="mt-1.5"><FileUpload label="Unggah gambar" testId="banner-file" value={f.gambar_url} onChange={(path) => setF({ ...f, gambar_url: path })} /></div></div>
+            <div><Label>Link (opsional)</Label><Input value={f.link_url} onChange={(e) => setF({ ...f, link_url: e.target.value })} placeholder="https://..." className="mt-1.5 h-11 rounded-xl" /></div>
+            <div>
+              <Label>Target Tampilan</Label>
+              <Select value={f.target} onValueChange={(v) => setF({ ...f, target: v })}>
+                <SelectTrigger className="mt-1.5 h-11 rounded-xl" data-testid="banner-target"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="all">Semua Pengguna</SelectItem><SelectItem value="patient">Pasien</SelectItem><SelectItem value="nakes">Nakes</SelectItem></SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-2"><Switch checked={f.status_aktif} onCheckedChange={(v) => setF({ ...f, status_aktif: v })} /><span className="text-sm text-slate-600">Aktif</span></div>
+            <Button onClick={save} data-testid="banner-save" className="w-full h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white">Simpan</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
 
