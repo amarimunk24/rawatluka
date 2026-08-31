@@ -5,6 +5,8 @@ import { useAuth } from "@/context/AuthContext";
 import DashboardShell from "@/components/DashboardShell";
 import ChatDialog from "@/components/ChatDialog";
 import DatePicker from "@/components/DatePicker";
+import MapView from "@/components/MapView";
+import AuthImage from "@/components/AuthImage";
 import { StatusBadge, StarRating } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -120,6 +122,16 @@ function SearchSection() {
           <div className="md:col-span-2">
             <div className="flex justify-between"><Label>Radius pencarian</Label><span className="text-sm font-semibold text-emerald-600">{maxDist} km</span></div>
             <Slider value={[maxDist]} onValueChange={(v) => setMaxDist(v[0])} min={1} max={50} step={1} className="mt-3" />
+          </div>
+          <div className="md:col-span-2">
+            <Label>Peta lokasi (klik untuk menandai lokasi kunjungan)</Label>
+            <MapView className="mt-1.5" height={260} pickable
+              center={[lat || JAKARTA.lat, lng || JAKARTA.lng]}
+              markers={[
+                { lat: lat || JAKARTA.lat, lng: lng || JAKARTA.lng, type: "me", label: "Lokasi Anda" },
+                ...(results || []).filter((r) => r.latitude).map((r, i) => ({ lat: r.latitude + (i % 7) * 0.0006, lng: r.longitude + (i % 5) * 0.0006, type: "nakes", label: `${r.nama} • ${r.jarak_km} km` })),
+              ]}
+              onPick={(la, ln) => { setLat(la); setLng(ln); }} />
           </div>
         </div>
         <Button onClick={search} disabled={loading} data-testid="search-submit" className="mt-5 w-full md:w-auto h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-8">
@@ -426,8 +438,11 @@ function RecordView({ rec, onClose }) {
           </div>
           {rec.catatan_tambahan && <Field label="Catatan Tambahan" value={rec.catatan_tambahan} />}
           {rec.attachments?.length > 0 && (
-            <div className="grid grid-cols-3 gap-2">
-              {rec.attachments.map((a, i) => <img key={i} src={a} alt="lampiran" className="rounded-lg h-24 w-full object-cover" />)}
+            <div>
+              <div className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-1">Dokumentasi Foto</div>
+              <div className="grid grid-cols-3 gap-2">
+                {rec.attachments.map((a, i) => <AuthImage key={i} path={a} alt="lampiran" className="rounded-lg h-24 w-full object-cover border border-slate-200" />)}
+              </div>
             </div>
           )}
         </div>

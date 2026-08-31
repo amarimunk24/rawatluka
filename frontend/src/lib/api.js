@@ -32,4 +32,13 @@ export const formatTanggal = (iso) => {
   }
 };
 
+export const formatTanggalOnly = (val) => {
+  if (!val) return "-";
+  try {
+    return new Date(val).toLocaleDateString("id-ID", { dateStyle: "long" });
+  } catch {
+    return val;
+  }
+};
+
 export default api;

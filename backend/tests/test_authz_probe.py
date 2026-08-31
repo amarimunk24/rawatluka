@@ -45,7 +45,8 @@ def ctx():
         "nakes_id": nid, "service_id": svc["id"], "jadwal_kunjungan": "2026-08-02T09:00:00",
         "alamat": "Jl TEST", "latitude": -6.2088, "longitude": 106.8456}).json()
     return {"p1": p1["token"], "p2": p2["token"], "n1": n1["token"], "n2": n2["token"],
-            "order": order["id"], "admin": admin["token"]}
+            "order": order["id"], "admin": admin["token"],
+            "p2_email": f"test_p2_{S}@example.com"}
 
 
 def test_other_patient_cannot_read_order(ctx):
@@ -83,9 +84,12 @@ def test_other_patient_cannot_pay_order(ctx):
     assert r.status_code in (403, 404), f"IDOR: other patient paid someone's order ({r.status_code})"
 
 
-def test_brute_force_lockout():
+def test_brute_force_lockout(ctx):
+    # Use the throwaway probe patient (never the shared admin account) so the 300s
+    # lockout cannot cascade into other suites that need admin login.
+    email = ctx["p2_email"]
     codes = []
     for _ in range(7):
         codes.append(requests.post(f"{API}/auth/login", json={
-            "email": "admin@homecare.id", "password": "bad-pass"}).status_code)
+            "email": email, "password": "bad-pass"}).status_code)
     assert 429 in codes, f"No brute-force lockout; codes={codes}"

@@ -1,8 +1,9 @@
 import { useEffect, useState, useCallback } from "react";
 import { toast } from "sonner";
-import api, { apiError, formatRupiah, formatTanggal } from "@/lib/api";
+import api, { apiError, formatRupiah, formatTanggal, formatTanggalOnly } from "@/lib/api";
 import DashboardShell from "@/components/DashboardShell";
 import { StatusBadge, EmptyState } from "@/components/common";
+import AuthImage from "@/components/AuthImage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -114,11 +115,14 @@ function Verifikasi() {
                 <div className="font-semibold text-slate-800 mb-2">Dokumen Legal</div>
                 {detail.documents?.length ? detail.documents.map((d) => (
                   <div key={d.id} className="flex items-center justify-between rounded-lg border border-slate-200 p-2 mb-2">
-                    <div><div className="font-medium">{d.jenis_dokumen} — {d.nomor_dokumen}</div><div className="text-xs text-slate-500">s/d {d.tanggal_valid}</div></div>
+                    <div className="flex items-center gap-2">
+                      {d.file_url && !d.file_url.toLowerCase().endsWith(".pdf") && <AuthImage path={d.file_url} className="h-12 w-12 rounded object-cover border border-slate-200" />}
+                      <div><div className="font-medium">{d.jenis_dokumen} — {d.nomor_dokumen}</div><div className="text-xs text-slate-500">s/d {formatTanggalOnly(d.tanggal_valid)}</div></div>
+                    </div>
                     <div className="flex items-center gap-2">
                       <StatusBadge status={d.status_verifikasi_admin} />
-                      <Button size="icon" variant="ghost" className="h-7 w-7 text-emerald-600" onClick={() => verifyDoc(d.id, "accept")}><Check className="h-4 w-4" /></Button>
-                      <Button size="icon" variant="ghost" className="h-7 w-7 text-red-500" onClick={() => verifyDoc(d.id, "reject")}><X className="h-4 w-4" /></Button>
+                      <Button size="icon" variant="ghost" aria-label="Setujui dokumen" data-testid={`doc-approve-${d.id}`} className="h-7 w-7 text-emerald-600" onClick={() => verifyDoc(d.id, "accept")}><Check className="h-4 w-4" /></Button>
+                      <Button size="icon" variant="ghost" aria-label="Tolak dokumen" data-testid={`doc-reject-${d.id}`} className="h-7 w-7 text-red-500" onClick={() => verifyDoc(d.id, "reject")}><X className="h-4 w-4" /></Button>
                     </div>
                   </div>
                 )) : <p className="text-slate-400">Tidak ada dokumen.</p>}

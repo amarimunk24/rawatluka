@@ -1,0 +1,63 @@
+{
+  "summary": "Iteration 2 testing of the 3 new features (real file uploads via Emergent object storage, Leaflet maps, 2.5s chat polling) + full regression. Backend: added /app/backend/tests/test_uploads_maps_chat.py (22 tests) covering POST /api/upload (auth required, png ok, bad extension 400, >8MB 400), GET /api/files/{path} (401 no token, 401 bad token, 200 via ?auth=, 200 via Bearer, 404 unknown path), nakes document file_url persistence + admin visibility + admin doc/nakes verify, provider search exposing latitude/longitude, SOAP medical record with photo attachment + patient read + cross-patient 403, and chat send/poll ordering + outsider 403. Result 22/22 pass. Regression: backend_test.py 57/57 pass and test_authz_probe.py 7/7 pass (all iteration-1 IDOR gaps now closed, brute-force lockout works). Frontend: found and unblocked a CRITICAL crash — react-leaflet 4.2.1 is not compatible with React 19 and threw 'Map container is already initialized.', white-screening the ENTIRE patient dashboard (Beranda hosts the map) and the nakes 'Profil & Lokasi' tab. Upgraded react-leaflet to 5.0.0 (yarn) which fixed it; after that the full UI journey passed: patient map renders with blue 'Lokasi Anda' marker, map click updates search-lat/search-lng, search returns 6 providers with 6 green nakes markers; nakes profile map click updates nakes-lat/nakes-lng and coordinates persist after save+reload; document upload (doc-file) shows preview, error toast when adding without a file, document row with loaded thumbnail + 'Menunggu' status; invalid .txt upload rejected with backend 400 + error toast; SOAP wound photo uploaded and thumbnail rendered, record submitted; patient 'Rekam Medis' shows 'Dokumentasi Foto' with the authenticated image loaded (naturalWidth>0, ?auth= in src); chat message appears in the open dialog and an incoming message posted out-of-band appeared within 4s (2.5s polling); patient QRIS pay + review, admin verification detail shows the document thumbnail and approve works, admin payment verification works; mobile 390px map renders with tiles.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/files/{path}", "issue": "Authorization only validates that the JWT is well-formed — any authenticated user (any role) can fetch ANY file path, including another patient's wound photos and other nakes' STR/SIP scans. Security relies solely on the random uuid filename. Add an ownership/relationship check (file owner, the order's patient/nakes, or admin)."},
+      {"endpoint": "POST /api/upload, GET /api/files/{path}", "issue": "put_object/get_object use the blocking `requests` library inside async endpoints (no thread offloading) — an 8MB upload/download blocks the FastAPI event loop for the whole request. Use httpx.AsyncClient or starlette run_in_threadpool."},
+      {"endpoint": "POST /api/auth/login", "issue": "LOGIN_ATTEMPTS is a process-local dict: lockout state is lost on restart and is not shared across replicas. Also no unlock on password reset. Acceptable for preview, not for production."},
+      {"endpoint": "POST /api/upload", "issue": "Whole file is read into memory before the size check (`await file.read()` then len>8MB), so a malicious 500MB upload is buffered fully before rejection. Check Content-Length / stream in chunks."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "MapView / react-leaflet", "issue": "FIXED BY TESTER (dependency upgrade): react-leaflet 4.2.1 + React 19 threw 'Map container is already initialized.' on mount, unmounting the whole React tree — patient dashboard was 100% white-screened at /pasien and nakes 'Profil & Lokasi' was unusable. Upgraded to react-leaflet@5.0.0 (+@react-leaflet/core@3.0.0). Main agent must keep this package.json/yarn.lock change.", "selector": ".leaflet-container", "priority": "CRITICAL"},
+      {"component": "MapView markers (patient search)", "issue": "All nakes share coordinates -6.21/106.85 so the green markers stack exactly; clicking a marker never opens the popup (marker 'intercepts pointer events' — Playwright normal click times out). Add marker jitter/clustering or make popups reachable.", "selector": ".leaflet-marker-icon[src*=\"green\"]", "priority": "MEDIUM"},
+      {"component": "AdminDashboard verification detail", "issue": "Per-document approve/reject icon buttons have no data-testid and no aria-label/title (rendered as empty-text buttons) — not addressable by tests or screen readers.", "selector": "[role=\"dialog\"] button", "priority": "LOW"},
+      {"component": "DashboardShell nav", "issue": "Same data-testid (nav-beranda/nav-profil/...) is rendered twice (desktop sidebar + mobile sheet), so strict locators resolve 2 elements and the hidden one is picked first. Suffix the mobile ones (e.g. nav-profil-mobile).", "selector": "[data-testid=\"nav-profil\"]", "priority": "LOW"},
+      {"component": "NakesDashboard SOAP dialog", "issue": "FIXED BY TESTER: vitals/keluhan/diagnosis inputs had no data-testid; added soap-keluhan, soap-td, soap-nadi, soap-suhu, soap-diagnosis (testId prop on FieldI/FieldT).", "selector": "[data-testid=\"soap-td\"]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Nakes Dokumen Legal list", "issues": ["Expiry shows the raw ISO string 'Berlaku sampai 2026-08-15' while the picker displays '15 Agustus 2026' — inconsistent, non-Indonesian format (same raw format in admin verification detail 's/d 2026-08-15')"]},
+      {"screen": "Patient Beranda map", "issues": ["Map is 260px tall but full container width (~1265px) on desktop, giving a very wide letterbox strip; consider a max-width or taller aspect", "Uploaded/legal document thumbnails render as bare white squares when the image is light — no border/placeholder contrast, hard to tell a real photo from an empty box"]},
+      {"screen": "Admin Verifikasi Nakes", "issues": ["List is polluted with 13+ leftover 'TEST ...' nakes from automated runs and duplicate service offerings produce duplicate provider cards in patient search (still unfixed from iteration 1)"]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_uploads_maps_chat.py",
+    "/app/backend/tests/backend_test.py",
+    "/app/backend/tests/test_authz_probe.py",
+    "/app/test_reports/pytest/iter2_uploads.xml",
+    "/app/test_reports/pytest/iter2_regression.xml"
+  ],
+  "action_items": [
+    "KEEP the react-leaflet 5.0.0 upgrade in frontend/package.json + yarn.lock (react-leaflet 4.x crashes under React 19); re-verify after any dependency reinstall.",
+    "Add ownership/relationship authorization to GET /api/files/{path} — currently any valid JWT can read any uploaded medical photo or legal document (PHI exposure).",
+    "Offload object-storage PUT/GET off the event loop (httpx.AsyncClient or run_in_threadpool) and enforce the 8MB limit before buffering the whole body.",
+    "Spread/cluster overlapping nakes markers so popups are clickable when several nakes share coordinates.",
+    "Add data-testid + aria-label to the per-document approve/reject buttons in the admin verification dialog; de-duplicate nav-* data-testids between desktop and mobile nav.",
+    "Format document dates with the Indonesian long format (as the picker does) in nakes document list and admin verification detail.",
+    "Clean up leftover TEST nakes/services seed pollution and prevent duplicate nakes_services rows per service (carried over from iteration 1)."
+  ],
+  "critical_code_review_comments": [
+    "server.py is now 910 lines — split into routers (auth, nakes, orders, payments, files, admin).",
+    "serve_file() authenticates but does not authorize: it should verify the caller is the file owner, a party to the order that references the file, or an admin.",
+    "init_storage/put_object/get_object are synchronous `requests` calls inside async handlers; also storage_key is a module global with no lock (concurrent 404-retries can re-init twice).",
+    "AuthImage puts the raw JWT in the image URL query string (?auth=), which leaks the token into browser history, proxy/access logs and Referer headers. Prefer a short-lived signed file token or an httpOnly-cookie-authenticated file route.",
+    "FileUpload does no client-side size/type pre-check, so users must wait for an 8MB round-trip before being told the format is unsupported."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_uploads_maps_chat.py (new: 22 tests for upload/files/document file_url/search coords/SOAP photo/chat polling)",
+    "/app/backend/tests/test_authz_probe.py (brute-force test now locks a throwaway account instead of admin@homecare.id, which was cascading 429s into other suites)",
+    "/app/frontend/src/pages/nakes/NakesDashboard.jsx (added data-testid to SOAP fields via testId prop on FieldI/FieldT)",
+    "/app/frontend/package.json + yarn.lock (react-leaflet 4.2.1 -> 5.0.0, @react-leaflet/core 3.0.0) — required to fix the React 19 map crash"
+  ],
+  "success_rate": {"backend": "100% (86/86: 22 new + 57 regression + 7 authz)", "frontend": "100% of tested flows after the react-leaflet fix (0% before it — patient dashboard was white-screened)"},
+  "seed_data_creation": "Created via API/UI: TEST nakes/patient accounts test_nak_up_*/test_pat_up_*/test_intr_*/test_chatintr_* (pytest), one patient order 'UI TEST addr' for siti@pasien.id -> Ns. Budi (accepted, SOAP with photo, QRIS paid + admin-verified, 5-star review), and a nakes document 'STR — UI-STR-2026' with an uploaded PNG on budi@nakes.id.",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "admin@homecare.id/admin123, siti@pasien.id/pasien123, budi@nakes.id/nakes123 (all valid; note the 5-fail/300s lockout — a locked account returns 429 for 5 minutes)",
+  "context_for_next_testing_agent": "Run backend suites ONE FILE AT A TIME with -n 0 (`python -m pytest tests/<file> -n 0 -q`): the suites share session state and pytest.ini forces -n 2 --dist loadscope, which splits a module's state across workers and produces bogus KeyError failures. Do NOT run wrong-password/brute-force tests against admin@homecare.id — the 300s in-memory lockout cascades 429s into every other suite (already changed in test_authz_probe.py). Frontend: react-leaflet must stay >=5.0.0 for React 19; verify .leaflet-container renders on /pasien Beranda and nakes Profil after any dependency change. Hidden file inputs need wait_for_selector(state='attached') and toasts disappear after ~4s, so poll for them.",
+  "rca_of_the_issue": "Root cause of the map crash: package.json pinned react-leaflet 4.2.1 while React/react-dom are 19.0.0. react-leaflet 4.x re-runs MapContainer's layout effect on React 19's remount/reappear pass without removing the previous Leaflet instance, so Leaflet throws 'Map container is already initialized.'; the uncaught error unmounted the whole React tree, blanking the patient dashboard (map is on the default Beranda tab) and the nakes Profil tab. Reproduction: log in as siti@pasien.id -> /pasien renders blank with pageerror 'Map container is already initialized.'. Mitigation applied: `yarn add react-leaflet@^5.0.0` (pulls @react-leaflet/core 3.0.0, the React 19-compatible release) + frontend restart; map, tiles, markers, click-to-pick and popups then render with zero page errors."
+}

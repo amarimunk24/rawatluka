@@ -22,7 +22,7 @@ export default function ChatDialog({ orderId, open, onOpenChange, title }) {
   useEffect(() => {
     if (open) {
       load();
-      const t = setInterval(load, 4000);
+      const t = setInterval(load, 2500);
       return () => clearInterval(t);
     }
   }, [open, orderId]);

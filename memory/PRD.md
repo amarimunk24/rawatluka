@@ -21,16 +21,21 @@ Auth & roles · provider search by radius/service/rating · booking with schedul
 - Patient: search, booking (calendar+time), orders, payment (QRIS/Cash), review, medical record viewer + print, profile with coords.
 - Nakes: overview/income, incoming orders + accept/reject, SOAP form, services & tariffs, legal documents, profile/location/online toggle.
 - Admin: platform stats, nakes verification (+document verify), payment/transaction verification, service management, patient list.
-- Notifications bell (polling), in-order chat (polling).
+- Notifications bell (polling), in-order chat (polling 2.5s).
 - Security: per-resource ownership checks (IDOR fixed), login rate limiting (5 attempts / 5 min lockout), password min length, duplicate-service guard, payment 500 guard.
-- Verified: 57/57 backend functional tests, 7/7 authz probes pass after fixes, full UI journey passed.
+
+## Iteration 2 (2026-06) — added
+- **Real file uploads** via Emergent object storage: nakes STR/SIP/certificate photos & wound/medical-record photos. Endpoints POST /api/upload, GET /api/files/{path} (JWT via header or ?auth=). File-serving now authorizes owner / admin / record-owning patient (PHI protection verified). Storage calls offloaded via run_in_threadpool.
+- **Interactive maps** (react-leaflet 5.0.0 + OpenStreetMap, no API key): patient search map with self + nakes markers (jittered when overlapping); click-to-pick coordinates on patient search and nakes profile.
+- **More real-time chat**: 2.5s polling while dialog open.
+- Verified: 86/86 backend tests (22 new + 57 regression + 7 authz), 100% frontend flows.
+- NOTE: react-leaflet MUST stay >=5.0.0 (4.x crashes under React 19).
 
 ## Backlog (P1/P2)
-- P1: real file uploads for documents/wound photos (object storage) — currently metadata/URL only.
-- P1: real payment gateway (QRIS/Stripe) — currently mocked.
-- P2: real map/geolocation (Google Maps) — currently manual coords.
-- P2: split server.py into routers; extract dashboard dialogs into components.
-- P2: websocket chat instead of polling.
+- P1: real payment gateway (QRIS/Stripe) — currently mocked (Stripe unsupported in Indonesia).
+- P2: signed short-lived file tokens instead of ?auth= JWT in image URL.
+- P2: split server.py into routers; websocket chat instead of polling.
+- P2: streaming upload size-check before buffering; shared/persistent login lockout store.
 
 ## Notes
 - MOCKED: payments (QRIS/Cash simulated), geolocation (manual coordinates + haversine). No real money or GPS map.

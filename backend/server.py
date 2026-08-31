@@ -5,8 +5,10 @@ import os
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-from fastapi import FastAPI, APIRouter, HTTPException, Request, Depends
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Depends, UploadFile, File, Header, Query
 from starlette.middleware.cors import CORSMiddleware
+from starlette.responses import Response
+from starlette.concurrency import run_in_threadpool
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional
@@ -29,6 +31,46 @@ PLATFORM_COMMISSION = 0.15
 TRANSPORT_RATE_PER_KM = 3000  # Rupiah per km
 LOGIN_ATTEMPTS = {}
 LOCKOUT_SECONDS = 300
+
+# ---------------- Object Storage ----------------
+STORAGE_BASE = (os.environ.get("INTEGRATION_PROXY_URL") or "").strip() or "https://integrations.emergentagent.com"
+STORAGE_URL = STORAGE_BASE.rstrip("/") + "/objstore/api/v1/storage"
+EMERGENT_KEY = os.environ.get("EMERGENT_LLM_KEY")
+APP_NAME = "homecare-id"
+MIME_TYPES = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "gif": "image/gif", "webp": "image/webp", "pdf": "application/pdf"}
+storage_key = None
+
+
+def init_storage(force: bool = False):
+    global storage_key
+    if storage_key and not force:
+        return storage_key
+    resp = requests.post(f"{STORAGE_URL}/init", json={"emergent_key": EMERGENT_KEY}, timeout=30)
+    resp.raise_for_status()
+    storage_key = resp.json()["storage_key"]
+    return storage_key
+
+
+def put_object(path: str, data: bytes, content_type: str) -> dict:
+    key = init_storage()
+    resp = requests.put(f"{STORAGE_URL}/objects/{path}",
+                        headers={"X-Storage-Key": key, "Content-Type": content_type}, data=data, timeout=120)
+    if resp.status_code == 404:
+        key = init_storage(force=True)
+        resp = requests.put(f"{STORAGE_URL}/objects/{path}",
+                            headers={"X-Storage-Key": key, "Content-Type": content_type}, data=data, timeout=120)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def get_object(path: str):
+    key = init_storage()
+    resp = requests.get(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": key}, timeout=60)
+    if resp.status_code == 404:
+        key = init_storage(force=True)
+        resp = requests.get(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": key}, timeout=60)
+    resp.raise_for_status()
+    return resp.content, resp.headers.get("Content-Type", "application/octet-stream")
 
 app = FastAPI(title="Home Care Indonesia API")
 api = APIRouter(prefix="/api")
@@ -408,6 +450,61 @@ async def list_services():
     return await db.services.find({"status_aktif": True}, {"_id": 0}).to_list(200)
 
 
+# ---------------- File upload / serving ----------------
+@api.post("/upload")
+async def upload_file(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    ext = (file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else "bin")
+    if ext not in MIME_TYPES:
+        raise HTTPException(400, "Format tidak didukung. Gunakan JPG, PNG, WEBP, atau PDF.")
+    data = await file.read()
+    if len(data) > 8 * 1024 * 1024:
+        raise HTTPException(400, "Ukuran file maksimal 8MB")
+    path = f"{APP_NAME}/uploads/{user['id']}/{uuid.uuid4().hex}.{ext}"
+    ctype = file.content_type or MIME_TYPES.get(ext, "application/octet-stream")
+    try:
+        result = await run_in_threadpool(put_object, path, data, ctype)
+    except Exception as e:
+        logger.error(f"Upload failed: {e}")
+        raise HTTPException(502, "Gagal mengunggah file. Coba lagi.")
+    await db.files.insert_one({
+        "id": new_id("file"), "storage_path": result["path"], "original_filename": file.filename,
+        "content_type": ctype, "size": result.get("size"), "owner_id": user["id"],
+        "is_deleted": False, "created_at": now_iso(),
+    })
+    return {"path": result["path"], "content_type": ctype}
+
+
+@api.get("/files/{path:path}")
+async def serve_file(path: str, authorization: str = Header(None), auth: str = Query(None)):
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization[7:]
+    elif auth:
+        token = auth
+    if not token:
+        raise HTTPException(401, "Tidak terautentikasi")
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
+    except jwt.InvalidTokenError:
+        raise HTTPException(401, "Token tidak valid")
+    reqer = await db.users.find_one({"id": payload["sub"]}, {"_id": 0})
+    if not reqer:
+        raise HTTPException(401, "Pengguna tidak ditemukan")
+    record = await db.files.find_one({"storage_path": path, "is_deleted": False})
+    if not record:
+        raise HTTPException(404, "File tidak ditemukan")
+    # Authorization: owner (uploader), admin, or the patient of a medical record that references this file
+    allowed = reqer["role"] == "admin" or record.get("owner_id") == reqer["id"]
+    if not allowed and reqer["role"] == "patient":
+        pat = await db.patients.find_one({"user_id": reqer["id"]})
+        if pat and await db.medical_records.find_one({"attachments": path, "patient_id": pat["id"]}):
+            allowed = True
+    if not allowed:
+        raise HTTPException(403, "Akses ditolak")
+    data, ctype = await run_in_threadpool(get_object, path)
+    return Response(content=data, media_type=record.get("content_type", ctype))
+
+
 # ---------------- Provider search ----------------
 @api.get("/providers/search")
 async def search_providers(service_id: str, lat: float, lng: float,
@@ -433,7 +530,7 @@ async def search_providers(service_id: str, lat: float, lng: float,
             "pengalaman_tahun": nak.get("pengalaman_tahun"), "deskripsi_bio": nak.get("deskripsi_bio"),
             "rating_rata_rata": nak.get("rating_rata_rata", 0), "jumlah_review": nak.get("jumlah_review", 0),
             "jarak_km": dist, "tarif_nakes": off["tarif_nakes"], "durasi_estimasi": off["durasi_estimasi"],
-            "nama_layanan": off["nama_layanan"],
+            "nama_layanan": off["nama_layanan"], "latitude": nak["latitude"], "longitude": nak["longitude"],
         })
     result.sort(key=lambda x: (x["jarak_km"], -x["rating_rata_rata"]))
     return result
@@ -778,6 +875,11 @@ DEFAULT_SERVICES = [
 
 @app.on_event("startup")
 async def startup():
+    try:
+        init_storage()
+        logger.info("Storage initialized")
+    except Exception as e:
+        logger.error(f"Storage init failed: {e}")
     await db.users.create_index("email", unique=True)
     await db.users.create_index("id", unique=True)
     # seed admin

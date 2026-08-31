@@ -42,7 +42,7 @@ export default function DashboardShell({ nav, active, onNav, title, children }) 
     navigate("/");
   };
 
-  const SidebarContent = () => (
+  const SidebarContent = ({ mobile = false }) => (
     <>
       <div className="flex items-center gap-2 px-2 py-4">
         <div className="h-9 w-9 rounded-xl bg-emerald-600 grid place-items-center">
@@ -52,7 +52,7 @@ export default function DashboardShell({ nav, active, onNav, title, children }) 
       </div>
       <nav className="mt-4 space-y-1">
         {nav.map((n) => (
-          <button key={n.key} data-testid={`nav-${n.key}`}
+          <button key={n.key} data-testid={`nav-${n.key}${mobile ? "-mobile" : ""}`}
             onClick={() => { onNav(n.key); setOpenMobile(false); }}
             className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${active === n.key ? "bg-emerald-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}>
             <n.icon className="h-5 w-5" /> {n.label}
@@ -80,7 +80,7 @@ export default function DashboardShell({ nav, active, onNav, title, children }) 
         <div className="md:hidden fixed inset-0 z-50 flex">
           <div className="w-64 bg-white px-3 py-2 flex flex-col">
             <div className="flex justify-end"><Button variant="ghost" size="icon" onClick={() => setOpenMobile(false)}><X className="h-5 w-5" /></Button></div>
-            <SidebarContent />
+            <SidebarContent mobile />
             <div className="mt-auto pb-4">
               <button onClick={doLogout} data-testid="mobile-logout-btn" className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50">
                 <LogOut className="h-5 w-5" /> Keluar

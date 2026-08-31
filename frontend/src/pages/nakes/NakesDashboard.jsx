@@ -1,10 +1,13 @@
 import { useEffect, useState, useCallback } from "react";
 import { toast } from "sonner";
-import api, { apiError, formatRupiah, formatTanggal } from "@/lib/api";
+import api, { apiError, formatRupiah, formatTanggal, formatTanggalOnly } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import DashboardShell from "@/components/DashboardShell";
 import ChatDialog from "@/components/ChatDialog";
 import DatePicker from "@/components/DatePicker";
+import FileUpload from "@/components/FileUpload";
+import AuthImage from "@/components/AuthImage";
+import MapView from "@/components/MapView";
 import { StatusBadge, EmptyState } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -148,6 +151,7 @@ function Orders() {
 
 function SoapDialog({ order, onClose, onDone }) {
   const [f, setF] = useState({ diagnosis: "", tindakan: "", catatan_tambahan: "", keluhan: "", tekanan_darah: "", nadi: "", respirasi: "", suhu: "", spo2: "", kondisi_luka: "", assessment: "", plan: "" });
+  const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(false);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const submit = async () => {
@@ -157,7 +161,7 @@ function SoapDialog({ order, onClose, onDone }) {
       await api.post(`/orders/${order.id}/medical-record`, {
         diagnosis: f.diagnosis, tindakan: f.tindakan, catatan_tambahan: f.catatan_tambahan,
         soap: { keluhan: f.keluhan, tekanan_darah: f.tekanan_darah, nadi: f.nadi, respirasi: f.respirasi, suhu: f.suhu, spo2: f.spo2, kondisi_luka: f.kondisi_luka, assessment: f.assessment, plan: f.plan },
-        attachments: [],
+        attachments: photos,
       });
       toast.success("Rekam medis tersimpan & layanan selesai");
       onDone(); onClose();
@@ -170,22 +174,34 @@ function SoapDialog({ order, onClose, onDone }) {
         <DialogHeader><DialogTitle>Rekam Medis SOAP — {order.patient_nama}</DialogTitle></DialogHeader>
         <div className="space-y-4">
           <Section title="S — Subjektif">
-            <FieldT label="Keluhan pasien *" value={f.keluhan} onChange={set("keluhan")} />
+            <FieldT label="Keluhan pasien *" value={f.keluhan} onChange={set("keluhan")} testId="soap-keluhan" />
           </Section>
           <Section title="O — Objektif (Vital Sign)">
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              <FieldI label="Tekanan Darah *" value={f.tekanan_darah} onChange={set("tekanan_darah")} ph="120/80" />
-              <FieldI label="Nadi *" value={f.nadi} onChange={set("nadi")} ph="80x/mnt" />
+              <FieldI label="Tekanan Darah *" value={f.tekanan_darah} onChange={set("tekanan_darah")} ph="120/80" testId="soap-td" />
+              <FieldI label="Nadi *" value={f.nadi} onChange={set("nadi")} ph="80x/mnt" testId="soap-nadi" />
               <FieldI label="Respirasi" value={f.respirasi} onChange={set("respirasi")} ph="20x/mnt" />
-              <FieldI label="Suhu *" value={f.suhu} onChange={set("suhu")} ph="36.5°C" />
+              <FieldI label="Suhu *" value={f.suhu} onChange={set("suhu")} ph="36.5°C" testId="soap-suhu" />
               <FieldI label="SpO2" value={f.spo2} onChange={set("spo2")} ph="98%" />
             </div>
             <FieldT label="Kondisi luka (jika ada)" value={f.kondisi_luka} onChange={set("kondisi_luka")} />
+            <div>
+              <Label className="text-xs">Foto luka / dokumentasi</Label>
+              <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                {photos.map((p, i) => (
+                  <div key={i} className="relative">
+                    <AuthImage path={p} className="h-20 w-20 rounded-lg object-cover border border-slate-200" />
+                    <button type="button" onClick={() => setPhotos(photos.filter((_, j) => j !== i))} className="absolute -top-2 -right-2 h-5 w-5 rounded-full bg-red-500 text-white grid place-items-center"><X className="h-3 w-3" /></button>
+                  </div>
+                ))}
+                <FileUpload label="Foto" testId="soap-photo" onChange={(path) => path && setPhotos((prev) => [...prev, path])} value="" />
+              </div>
+            </div>
           </Section>
           <Section title="A — Assessment"><FieldT label="Penilaian kondisi" value={f.assessment} onChange={set("assessment")} /></Section>
           <Section title="P — Plan"><FieldT label="Rencana tindak lanjut" value={f.plan} onChange={set("plan")} /></Section>
           <div className="grid sm:grid-cols-2 gap-3">
-            <FieldI label="Diagnosis" value={f.diagnosis} onChange={set("diagnosis")} />
+            <FieldI label="Diagnosis" value={f.diagnosis} onChange={set("diagnosis")} testId="soap-diagnosis" />
             <FieldI label="Tindakan" value={f.tindakan} onChange={set("tindakan")} />
           </div>
         </div>
@@ -205,8 +221,8 @@ const Section = ({ title, children }) => (
     <div className="space-y-3">{children}</div>
   </div>
 );
-const FieldI = ({ label, value, onChange, ph }) => (<div><Label className="text-xs">{label}</Label><Input value={value} onChange={onChange} placeholder={ph} className="mt-1 h-10 rounded-lg" /></div>);
-const FieldT = ({ label, value, onChange }) => (<div><Label className="text-xs">{label}</Label><Textarea value={value} onChange={onChange} className="mt-1 rounded-lg" rows={2} /></div>);
+const FieldI = ({ label, value, onChange, ph, testId }) => (<div><Label className="text-xs">{label}</Label><Input value={value} onChange={onChange} placeholder={ph} className="mt-1 h-10 rounded-lg" data-testid={testId} /></div>);
+const FieldT = ({ label, value, onChange, testId }) => (<div><Label className="text-xs">{label}</Label><Textarea value={value} onChange={onChange} className="mt-1 rounded-lg" rows={2} data-testid={testId} /></div>);
 
 function Services() {
   const { user, refresh } = useAuth();
@@ -264,11 +280,12 @@ function Services() {
 function Documents() {
   const { user, refresh } = useAuth();
   const [docs, setDocs] = useState(user?.profile?.documents || []);
-  const [f, setF] = useState({ jenis_dokumen: "STR", nomor_dokumen: "", tanggal_valid: "" });
+  const [f, setF] = useState({ jenis_dokumen: "STR", nomor_dokumen: "", tanggal_valid: "", file_url: "" });
   useEffect(() => { setDocs(user?.profile?.documents || []); }, [user]);
   const add = async () => {
     if (!f.nomor_dokumen || !f.tanggal_valid) return toast.error("Lengkapi nomor & tanggal valid");
-    try { const { data } = await api.post("/nakes/documents", f); setDocs([...docs, data]); setF({ ...f, nomor_dokumen: "", tanggal_valid: "" }); toast.success("Dokumen ditambahkan"); refresh(); }
+    if (!f.file_url) return toast.error("Unggah foto/scan dokumen terlebih dahulu");
+    try { const { data } = await api.post("/nakes/documents", f); setDocs([...docs, data]); setF({ ...f, nomor_dokumen: "", tanggal_valid: "", file_url: "" }); toast.success("Dokumen ditambahkan"); refresh(); }
     catch (e) { toast.error(apiError(e.response?.data?.detail)); }
   };
   return (
@@ -285,14 +302,18 @@ function Documents() {
           </div>
           <div><Label>Nomor Dokumen</Label><Input value={f.nomor_dokumen} onChange={(e) => setF({ ...f, nomor_dokumen: e.target.value })} className="mt-1.5 h-11 rounded-xl" data-testid="doc-nomor" /></div>
           <div><Label>Berlaku Sampai</Label><DatePicker value={f.tanggal_valid} onChange={(v) => setF({ ...f, tanggal_valid: v })} testId="doc-valid" placeholder="Tanggal kedaluwarsa" fromYear={2020} /></div>
-          <div className="flex items-end"><Button onClick={add} data-testid="doc-add" className="w-full h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white">Tambah Dokumen</Button></div>
+          <div><Label>Foto / Scan Dokumen</Label><div className="mt-1.5"><FileUpload label="Unggah dokumen" testId="doc-file" accept="image/*,application/pdf" value={f.file_url} onChange={(path) => setF({ ...f, file_url: path })} /></div></div>
+          <div className="sm:col-span-2"><Button onClick={add} data-testid="doc-add" className="w-full h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white">Tambah Dokumen</Button></div>
         </div>
       </Card>
       {docs.length === 0 ? <EmptyState icon={FileBadge} text="Belum ada dokumen legal." /> : (
         <div className="space-y-2">
           {docs.map((d) => (
             <Card key={d.id} className="p-4 border-slate-200 flex items-center justify-between">
-              <div><div className="font-semibold text-slate-900">{d.jenis_dokumen} — {d.nomor_dokumen}</div><div className="text-sm text-slate-500">Berlaku sampai {d.tanggal_valid}</div></div>
+              <div className="flex items-center gap-3">
+                {d.file_url && !d.file_url.toLowerCase().endsWith(".pdf") && <AuthImage path={d.file_url} className="h-12 w-12 rounded-lg object-cover border border-slate-200" />}
+                <div><div className="font-semibold text-slate-900">{d.jenis_dokumen} — {d.nomor_dokumen}</div><div className="text-sm text-slate-500">Berlaku sampai {formatTanggalOnly(d.tanggal_valid)}</div></div>
+              </div>
               <StatusBadge status={d.status_verifikasi_admin} />
             </Card>
           ))}
@@ -335,6 +356,13 @@ function Profile() {
           <div className="md:col-span-2"><Label>Alamat Praktik</Label><Textarea value={f.alamat} onChange={set("alamat")} className="mt-1.5 rounded-xl" /></div>
           <div><Label>Latitude</Label><Input type="number" step="any" value={f.latitude} onChange={set("latitude")} className="mt-1.5 h-11 rounded-xl" data-testid="nakes-lat" /></div>
           <div><Label>Longitude</Label><Input type="number" step="any" value={f.longitude} onChange={set("longitude")} className="mt-1.5 h-11 rounded-xl" data-testid="nakes-lng" /></div>
+          <div className="md:col-span-2">
+            <Label>Titik Lokasi (klik peta untuk menandai)</Label>
+            <MapView className="mt-1.5" height={280} pickable
+              center={[Number(f.latitude) || -6.2088, Number(f.longitude) || 106.8456]}
+              markers={f.latitude && f.longitude ? [{ lat: Number(f.latitude), lng: Number(f.longitude), type: "me", label: "Lokasi Anda" }] : []}
+              onPick={(la, ln) => setF({ ...f, latitude: la.toFixed(6), longitude: ln.toFixed(6) })} />
+          </div>
           <div className="md:col-span-2">
             <div className="flex justify-between"><Label>Radius Layanan</Label><span className="text-sm font-semibold text-emerald-600">{f.radius_layanan} km</span></div>
             <Slider value={[Number(f.radius_layanan)]} onValueChange={(v) => setF({ ...f, radius_layanan: v[0] })} min={1} max={50} step={1} className="mt-3" />
