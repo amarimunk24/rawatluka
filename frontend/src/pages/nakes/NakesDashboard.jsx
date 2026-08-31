@@ -20,7 +20,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   LayoutDashboard, ClipboardList, Stethoscope, FileBadge, UserCog, Loader2,
-  MessageCircle, Check, X, ClipboardPlus, Wallet, TrendingUp, Star, Trash2, ShieldCheck, MapPin, Clock,
+  MessageCircle, Check, X, ClipboardPlus, Wallet, TrendingUp, Star, Trash2, ShieldCheck, MapPin, Clock, Navigation,
 } from "lucide-react";
 
 const NAV = [
@@ -134,6 +134,11 @@ function Orders() {
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
             <Button size="sm" variant="outline" className="rounded-full" onClick={() => setChat(o)} data-testid="order-chat"><MessageCircle className="h-4 w-4" /> Chat</Button>
+            {o.latitude != null && o.status_order === "accepted" && (
+              <a href={`https://www.google.com/maps/dir/?api=1&destination=${o.latitude},${o.longitude}`} target="_blank" rel="noopener noreferrer">
+                <Button size="sm" variant="outline" className="rounded-full text-sky-600 border-sky-200 hover:bg-sky-50" data-testid="route-btn"><Navigation className="h-4 w-4" /> Rute ke Lokasi</Button>
+              </a>
+            )}
             {o.status_order === "pending" && <>
               <Button size="sm" className="rounded-full bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => respond(o, "accept")} data-testid="accept-order"><Check className="h-4 w-4" /> Terima</Button>
               <Button size="sm" variant="outline" className="rounded-full text-red-600 border-red-200 hover:bg-red-50" onClick={() => respond(o, "reject")} data-testid="reject-order"><X className="h-4 w-4" /> Tolak</Button>

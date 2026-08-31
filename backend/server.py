@@ -19,6 +19,12 @@ import logging
 import bcrypt
 import jwt
 import requests
+import io
+from reportlab.lib.pagesizes import A4
+from reportlab.lib import colors
+from reportlab.lib.units import mm
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 
 # ---------------- DB ----------------
 mongo_url = os.environ['MONGO_URL']
@@ -693,6 +699,108 @@ async def patient_records(user: dict = Depends(require_role("patient"))):
         nu = await db.users.find_one({"id": nak["user_id"]}, {"_id": 0}) if nak else None
         r["nakes_nama"] = nu["nama_lengkap"] if nu else "-"
     return recs
+
+
+def _build_pdf(rec: dict, pasien_nama: str, nakes_nama: str) -> bytes:
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=18 * mm, bottomMargin=18 * mm,
+                            leftMargin=18 * mm, rightMargin=18 * mm, title="Rekam Medis")
+    styles = getSampleStyleSheet()
+    EM = colors.HexColor("#059669")
+    SL = colors.HexColor("#475569")
+    h_brand = ParagraphStyle("brand", parent=styles["Title"], fontSize=20, textColor=EM, spaceAfter=2)
+    h_sub = ParagraphStyle("sub", parent=styles["Normal"], fontSize=9, textColor=SL, spaceAfter=2)
+    sect = ParagraphStyle("sect", parent=styles["Heading2"], fontSize=12, textColor=EM, spaceBefore=10, spaceAfter=4)
+    body = ParagraphStyle("body", parent=styles["Normal"], fontSize=10, textColor=colors.HexColor("#1e293b"), leading=15)
+    label = ParagraphStyle("lab", parent=styles["Normal"], fontSize=8, textColor=SL)
+    s = rec.get("soap", {}) or {}
+    el = []
+    el.append(Paragraph("HomeCare.id", h_brand))
+    el.append(Paragraph("Layanan Kesehatan ke Rumah — Rekam Medis Elektronik", h_sub))
+    el.append(Spacer(1, 8))
+    line = Table([[""]], colWidths=[174 * mm], style=TableStyle([("LINEBELOW", (0, 0), (-1, -1), 1.2, EM)]))
+    el.append(line)
+    el.append(Spacer(1, 8))
+
+    def kv(rows):
+        t = Table(rows, colWidths=[42 * mm, 132 * mm])
+        t.setStyle(TableStyle([
+            ("FONTSIZE", (0, 0), (-1, -1), 10), ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("TEXTCOLOR", (0, 0), (0, -1), SL), ("TEXTCOLOR", (1, 0), (1, -1), colors.HexColor("#1e293b")),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4), ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ]))
+        return t
+
+    tgl = rec.get("tanggal_pelayanan", "")
+    try:
+        tgl = datetime.fromisoformat(tgl.replace("Z", "+00:00")).strftime("%d %B %Y, %H:%M")
+    except Exception:
+        pass
+    el.append(kv([
+        ["Pasien", Paragraph(pasien_nama, body)],
+        ["Tenaga Kesehatan", Paragraph(nakes_nama, body)],
+        ["Layanan", Paragraph(rec.get("nama_layanan", "-"), body)],
+        ["Tanggal Pelayanan", Paragraph(str(tgl), body)],
+    ]))
+
+    el.append(Paragraph("Diagnosis & Tindakan", sect))
+    el.append(kv([
+        ["Diagnosis", Paragraph(rec.get("diagnosis") or "-", body)],
+        ["Tindakan", Paragraph(rec.get("tindakan") or "-", body)],
+    ]))
+
+    el.append(Paragraph("Catatan SOAP", sect))
+    el.append(Paragraph("<b>S — Subjektif:</b> " + (s.get("keluhan") or "-"), body))
+    el.append(Spacer(1, 4))
+    vit = [["Tekanan Darah", s.get("tekanan_darah") or "-", "Nadi", s.get("nadi") or "-"],
+           ["Respirasi", s.get("respirasi") or "-", "Suhu", s.get("suhu") or "-"],
+           ["SpO2", s.get("spo2") or "-", "Kondisi Luka", s.get("kondisi_luka") or "-"]]
+    vt = Table(vit, colWidths=[32 * mm, 55 * mm, 32 * mm, 55 * mm])
+    vt.setStyle(TableStyle([
+        ("FONTSIZE", (0, 0), (-1, -1), 9), ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#e2e8f0")),
+        ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f0fdf4")), ("BACKGROUND", (2, 0), (2, -1), colors.HexColor("#f0fdf4")),
+        ("TEXTCOLOR", (0, 0), (0, -1), SL), ("TEXTCOLOR", (2, 0), (2, -1), SL),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5), ("TOPPADDING", (0, 0), (-1, -1), 5),
+    ]))
+    el.append(Paragraph("<b>O — Objektif (Tanda Vital):</b>", body))
+    el.append(Spacer(1, 3))
+    el.append(vt)
+    el.append(Spacer(1, 4))
+    el.append(Paragraph("<b>A — Assessment:</b> " + (s.get("assessment") or "-"), body))
+    el.append(Spacer(1, 3))
+    el.append(Paragraph("<b>P — Plan:</b> " + (s.get("plan") or "-"), body))
+    if rec.get("catatan_tambahan"):
+        el.append(Paragraph("Catatan Tambahan", sect))
+        el.append(Paragraph(rec["catatan_tambahan"], body))
+    el.append(Spacer(1, 18))
+    el.append(Paragraph("Dokumen ini dibuat otomatis oleh sistem HomeCare.id dan sah tanpa tanda tangan basah.", label))
+    doc.build(el)
+    return buf.getvalue()
+
+
+@api.get("/orders/{oid}/medical-record/pdf")
+async def record_pdf(oid: str, authorization: str = Header(None), auth: str = Query(None)):
+    token = authorization[7:] if (authorization and authorization.startswith("Bearer ")) else auth
+    if not token:
+        raise HTTPException(401, "Tidak terautentikasi")
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
+    except jwt.InvalidTokenError:
+        raise HTTPException(401, "Token tidak valid")
+    user = await db.users.find_one({"id": payload["sub"]}, {"_id": 0})
+    if not user:
+        raise HTTPException(401, "Pengguna tidak ditemukan")
+    o = await get_order_for_user(oid, user)
+    rec = await db.medical_records.find_one({"order_id": oid}, {"_id": 0})
+    if not rec:
+        raise HTTPException(404, "Rekam medis belum tersedia")
+    pat = await db.patients.find_one({"id": rec["patient_id"]})
+    pu = await db.users.find_one({"id": pat["user_id"]}, {"_id": 0}) if pat else None
+    nak = await db.nakes.find_one({"id": rec["nakes_id"]})
+    nu = await db.users.find_one({"id": nak["user_id"]}, {"_id": 0}) if nak else None
+    pdf = await run_in_threadpool(_build_pdf, rec, pu["nama_lengkap"] if pu else "-", nu["nama_lengkap"] if nu else "-")
+    return Response(content=pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="rekam-medis-{oid}.pdf"'})
 
 
 # ---------------- Payments ----------------

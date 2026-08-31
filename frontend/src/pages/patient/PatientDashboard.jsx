@@ -21,7 +21,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import {
   Home, ClipboardList, FileHeart, UserCog, Search, MapPin, Star, MessageCircle,
-  Wallet, CalendarIcon, Loader2, Stethoscope, Clock, Printer, QrCode, Banknote,
+  Wallet, CalendarIcon, Loader2, Stethoscope, Clock, Printer, QrCode, Banknote, Download,
 } from "lucide-react";
 
 const NAV = [
@@ -414,7 +414,20 @@ function RecordDialog({ orderId, onClose }) {
 
 function RecordView({ rec, onClose }) {
   const s = rec.soap || {};
+  const [downloading, setDownloading] = useState(false);
   const vitals = [["Tekanan Darah", s.tekanan_darah], ["Nadi", s.nadi], ["Respirasi", s.respirasi], ["Suhu", s.suhu], ["SpO2", s.spo2]];
+  const downloadPdf = async () => {
+    setDownloading(true);
+    try {
+      const { data } = await api.get(`/orders/${rec.order_id}/medical-record/pdf`, { responseType: "blob" });
+      const url = window.URL.createObjectURL(new Blob([data], { type: "application/pdf" }));
+      const a = document.createElement("a");
+      a.href = url; a.download = `rekam-medis-${rec.nama_layanan}.pdf`;
+      document.body.appendChild(a); a.click(); a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (e) { toast.error("Gagal mengunduh PDF"); }
+    finally { setDownloading(false); }
+  };
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
@@ -446,8 +459,11 @@ function RecordView({ rec, onClose }) {
             </div>
           )}
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => window.print()} className="rounded-xl" data-testid="print-record"><Printer className="h-4 w-4" /> Unduh / Cetak PDF</Button>
+        <DialogFooter className="gap-2 sm:gap-2">
+          <Button variant="outline" onClick={() => window.print()} className="rounded-xl" data-testid="print-record"><Printer className="h-4 w-4" /> Cetak</Button>
+          <Button onClick={downloadPdf} disabled={downloading} className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white" data-testid="download-pdf">
+            {downloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Download className="h-4 w-4" /> Unduh PDF</>}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

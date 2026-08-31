@@ -31,11 +31,13 @@ Auth & roles · provider search by radius/service/rating · booking with schedul
 - Verified: 86/86 backend tests (22 new + 57 regression + 7 authz), 100% frontend flows.
 - NOTE: react-leaflet MUST stay >=5.0.0 (4.x crashes under React 19).
 
-## Backlog (P1/P2)
-- P1: real payment gateway (QRIS/Stripe) — currently mocked (Stripe unsupported in Indonesia).
-- P2: signed short-lived file tokens instead of ?auth= JWT in image URL.
-- P2: split server.py into routers; websocket chat instead of polling.
-- P2: streaming upload size-check before buffering; shared/persistent login lockout store.
+## Iteration 3 (2026-06) — added
+- **Ekspor PDF Rekam Medis**: GET /api/orders/{oid}/medical-record/pdf (reportlab) — PDF berlogo HomeCare.id berisi info pasien/nakes, diagnosis/tindakan, SOAP + tabel tanda vital. Ownership-protected (owner patient/nakes/admin). Frontend: tombol "Unduh PDF" (blob) di viewer rekam medis. Verified: 200 application/pdf, valid %PDF header.
+- **Rute ke Lokasi**: tombol di kartu pesanan nakes (status accepted) membuka Google Maps directions ke koordinat rumah pasien (tanpa API key).
+
+## Pending integrations (need user API keys)
+- WhatsApp (Twilio) — awaiting Account SID, Auth Token, WhatsApp sender.
+- Real QRIS (Midtrans Snap `other_qris` + webhook) — awaiting Sandbox Server Key & Client Key; webhook will be {BACKEND}/api/payments/midtrans/webhook.
 
 ## Notes
 - MOCKED: payments (QRIS/Cash simulated), geolocation (manual coordinates + haversine). No real money or GPS map.
