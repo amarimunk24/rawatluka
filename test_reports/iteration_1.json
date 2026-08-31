@@ -1,0 +1,60 @@
+{
+  "summary": "Full-stack E2E validation of HomeCare Indonesia. Backend: created pytest suite (57 tests) covering auth/RBAC, nakes setup, admin verification, provider search + haversine/distance/rating filters, order lifecycle, chat, SOAP medical record, mock QRIS payment, admin payment verification, commission/income math, reviews, notifications, admin stats — 57/57 passed. Separately probed authorization boundaries with a second patient/nakes: 7 checks failed (cross-tenant IDOR + no login rate limiting). Frontend: completed the full 3-role UI journey (landing -> register nakes -> profile/lat-lng/online/service/document -> admin verify -> register patient -> search -> book (shadcn calendar+time) -> chat both ways -> nakes accept + SOAP submit -> patient QRIS pay -> review 4 stars -> view/print medical record -> admin verify payment (Lunas) -> nakes income Rp179.775 = 211.500 - 15% commission, rating 4 ★, admin stats/omzet updated). Notifications bell shows unread counts for order/verification/record/payment events. Mobile (390px) and desktop layouts render correctly.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/orders/{oid}, PUT /api/orders/{oid}/respond, PUT /api/orders/{oid}/complete, POST /api/orders/{oid}/medical-record, POST /api/orders/{oid}/payment, GET|POST /api/orders/{oid}/chat, GET /api/orders/{oid}/medical-record", "issue": "IDOR / missing ownership checks: any authenticated patient can read AND pay another patient's order; any verified/unverified nakes can accept, reject, complete and write the SOAP medical record for an order that belongs to a different nakes; any logged-in user can read/post to another order's chat and read its medical record (PHI leak). Verified with 2nd patient + 2nd nakes accounts — all returned 200 instead of 403/404.", "priority": "CRITICAL"},
+      {"endpoint": "POST /api/auth/login", "issue": "No brute-force protection/lockout: 7 consecutive wrong-password attempts on admin@homecare.id all returned 401, no 429 or account lock.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "PUT /api/payments/{pid}/verify", "issue": "Unguarded: if the payment's order row is missing, `pat = db.patients.find_one({'id': o['patient_id']})` dereferences o=None -> 500. Add a None check."},
+      {"endpoint": "POST /api/orders/{oid}/review", "issue": "Review allowed regardless of order status (no check that order is completed/paid) and by any patient (see IDOR)."},
+      {"endpoint": "POST /api/nakes/services", "issue": "Duplicate offerings for the same service_id can be added repeatedly (no uniqueness), which yields duplicate provider cards in search."},
+      {"endpoint": "POST /api/auth/register", "issue": "No password strength/length validation on the backend (frontend only enforces minLength=6)."},
+      {"endpoint": "POST /api/nakes/services, POST /api/nakes/documents", "issue": "Assumes db.nakes doc exists for the user (nak['id']) — would 500 for a nakes user whose profile row is missing; guard with 404."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "StarRating (common.jsx)", "issue": "Editable rating stars are bare <svg> with onClick — not focusable/keyboard accessible and had no test id (added data-testid=star-1..5 during testing).", "selector": "[data-testid=\"star-5\"]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Patient Profil (Tanggal Lahir) and Nakes Dokumen Legal (Berlaku Sampai)", "issues": ["Use the browser-default native date input (mm/dd/yyyy) instead of the shadcn Calendar/Popover used in the booking dialog — inconsistent UX and non-Indonesian date format"]},
+      {"screen": "Register page", "issues": ["No Google OAuth button, while the Login page has one — inconsistent sign-up options"]},
+      {"screen": "Provider search results", "issues": ["Nakes without a filled profile show generic 'Tenaga Kesehatan' and 0 rating with no 'baru' indicator; duplicate service offerings would render duplicate cards"]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/backend/tests/test_authz_probe.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "CRITICAL: add ownership/authorization checks on all /api/orders/{oid}/* endpoints (order belongs to the calling patient, or to the calling nakes) and on chat + medical-record read endpoints.",
+    "HIGH: add login rate limiting / lockout after ~5 failed attempts.",
+    "Guard verify_payment against a missing order document (currently 500-prone).",
+    "Restrict review creation to the order's own patient and to completed orders; prevent duplicate nakes_services rows per service.",
+    "Replace native date inputs in Patient Profil and Nakes Dokumen Legal with the shadcn Calendar component; add the Google button to the Register page (or remove from Login for consistency)."
+  ],
+  "critical_code_review_comments": [
+    "server.py (784 lines) is a single monolith — split into routers (auth, nakes, orders, payments, admin) before it grows further.",
+    "get_current_user only authenticates; there is no per-resource authorization helper. Introduce e.g. `async def get_owned_order(oid, user)` used by every order sub-route.",
+    "respond_order/complete_order accept any nakes token and silently update by id — this is the main data-integrity risk.",
+    "PatientDashboard.jsx is 502 lines with dialogs inline; consider extracting Booking/Payment/Review/Record dialogs.",
+    "Chat has no polling/websocket — messages only refresh when the dialog reopens (acceptable for MVP, worth noting)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py",
+    "/app/backend/tests/test_authz_probe.py",
+    "/app/frontend/src/pages/nakes/NakesDashboard.jsx (added data-testid=\"order-chat\" to nakes chat button)",
+    "/app/frontend/src/components/common.jsx (added data-testid=\"star-N\" to editable StarRating)",
+    "/app/frontend/src/components/DashboardShell.jsx (added data-testid mobile-menu-btn, mobile-logout-btn)"
+  ],
+  "success_rate": {"backend": "100% (57/57 functional pytest); 0/7 authorization-boundary probes pass", "frontend": "100% of requested UI flows pass"},
+  "seed_data_creation": "Backend suite creates TEST_-prefixed users per run (test_pat_*/test_nak_*, test_p1/p2/n1/n2 for the authz probe) plus one TEST layanan. UI accounts: pasien_ui26a@example.com / nakes_ui26a@example.com (password Passw0rd!) with a completed+paid+reviewed order.",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "Admin admin@homecare.id / admin123 (works). UI test accounts: pasien_ui26a@example.com and nakes_ui26a@example.com, password Passw0rd!",
+  "context_for_next_testing_agent": "Run functional suite with `cd /app/backend && python -m pytest tests/backend_test.py -n 0 -q` — the suite shares session state across classes so xdist loadscope (default addopts -n 2) breaks it; -n 0 is required. tests/test_authz_probe.py documents the 7 expected-to-fail authorization/rate-limit gaps; re-run it after the main agent adds ownership checks and all 7 should pass. Frontend flows fully verified end-to-end; if retesting UI, note admin nav keys are ringkasan/verifikasi/transaksi/layanan/pasien and booking requires a future date (calendar disables past days).",
+  "rca_of_the_issue": "All order/chat/medical-record/payment routes look documents up by id only (db.orders.find_one({'id': oid})) after a role check, never comparing the resource's patient_id/nakes_id with the caller's profile id. Reproduce: register 2 patients + 2 nakes, create an order with patient A/nakes A, then call PUT /api/orders/{id}/respond with nakes B's token -> 200 and the order status changes. Mitigation: resolve the caller's patient/nakes profile id and require it to match the order before mutating/reading."
+}

@@ -1,0 +1,159 @@
+{
+  "theme": "Light theme preferred for healthcare trust and cleanliness, with a clean structural grayscale base.",
+  "typography": {
+    "headings": {
+      "font_family": "Plus Jakarta Sans, sans-serif",
+      "rationale": "Friendly, approachable yet highly professional. Perfectly suits modern Indonesian tech platforms.",
+      "styles": [
+        "h1: text-4xl sm:text-5xl font-extrabold tracking-tight text-slate-900",
+        "h2: text-2xl sm:text-3xl font-bold tracking-tight text-slate-900",
+        "h3: text-xl sm:text-2xl font-semibold tracking-tight text-slate-800",
+        "labels: text-xs font-bold uppercase tracking-[0.2em] text-slate-500"
+      ]
+    },
+    "body": {
+      "font_family": "Inter, sans-serif",
+      "rationale": "High legibility for dense medical records (SOAP notes), vital signs, and tariffs.",
+      "styles": [
+        "body_default: text-base text-slate-600 leading-relaxed",
+        "body_small: text-sm text-slate-500",
+        "body_large: text-lg text-slate-700"
+      ]
+    }
+  },
+  "colors": {
+    "archetype": "ORGANIC & EARTHY (Health & Calm)",
+    "palette": {
+      "primary": "#059669", 
+      "primary_hover": "#047857",
+      "primary_light": "#D1FAE5",
+      "secondary": "#0369A1",
+      "secondary_hover": "#0284C7",
+      "background": "#F8FAFC",
+      "surface": "#FFFFFF",
+      "text_primary": "#0F172A",
+      "text_secondary": "#475569",
+      "border": "#E2E8F0",
+      "success": "#10B981",
+      "warning": "#F59E0B",
+      "error": "#EF4444"
+    },
+    "rules": [
+      "No teal green/blue (#1B93A4) as per forbidden rules. We use Emerald Green and Ocean Blue.",
+      "Never use pure black or pure white for long-form text backgrounds. Use tinted greys (Slate).",
+      "Ensure all text meets 4.5:1 APCA contrast ratio."
+    ]
+  },
+  "layouts": {
+    "marketing_landing": {
+      "structure": "Bento Grid (Mode A) with organic asymmetry.",
+      "spacing": "Generous (p-8, p-12, p-24) to let content breathe.",
+      "hero": "Clear value proposition with a warm, trusted image. Maximum overlay bg-black/40 if placing text over images."
+    },
+    "patient_dashboard": {
+      "structure": "Bento Grid (Mode A) to prioritize immediate needs: Search Provider, Ongoing Booking, Medical Records.",
+      "spacing": "Medium to tight (p-4 to p-6) with clear card separation."
+    },
+    "nakes_dashboard": {
+      "structure": "High Density Grid (Mode B) for task-first focus (Incoming orders, SOAP form, Vital signs input).",
+      "spacing": "Dense (p-4, gap-4) ensuring quick data entry and readability."
+    },
+    "admin_dashboard": {
+      "structure": "Sidebar + High Density Grid. Focus on tables, verification queues, and transaction monitors.",
+      "spacing": "Dense, utilitarian."
+    }
+  },
+  "components": {
+    "cards": {
+      "style": "Flat background, 1px solid border-slate-200, no drop-shadow by default.",
+      "hover": "Slight lift (-translate-y-1) and shadow-sm."
+    },
+    "buttons": {
+      "style": "Pill-shaped (rounded-full) or moderately rounded (rounded-xl) for friendliness.",
+      "interaction": "Clear hover state with text color explicitly set (hover:bg-emerald-700 hover:text-white)."
+    },
+    "forms": {
+      "style": "Use Shadcn Form, Input, Select. For medical inputs, use clear labeling and dense layout.",
+      "rule": "Never use native <input type='date'>. Use Shadcn Calendar component."
+    },
+    "navigation": {
+      "style": "Sticky header with crystal glassmorphism (backdrop-blur-xl bg-white/80 border-b border-slate-200) for marketing, solid background for dashboards."
+    }
+  },
+  "visual_enhancers": {
+    "surfaces": "Medical apps require flat solid surfaces instead of heavy glassmorphism to prevent visual refraction of clinical data.",
+    "textures": "Subtle noise overlay on the landing page hero for a premium feel. Dashboards should remain perfectly clean."
+  },
+  "motion": {
+    "rules": [
+      "Subtle micro-interactions on hover (opacity and slight transforms).",
+      "Use sonner for toast notifications (e.g., booking accepted, payment successful).",
+      "Do NOT use 'transition: all'. Explicitly state transitions (e.g., transition-colors duration-200)."
+    ]
+  },
+  "accessibility": {
+    "rules": [
+      "All interactive elements MUST have data-testid attributes (e.g., data-testid='book-provider-btn').",
+      "Focus states must have a clear ring (focus:ring-2 focus:ring-emerald-500).",
+      "Respect prefers-reduced-motion for all UI animations."
+    ]
+  },
+  "media": {
+    "icons": {
+      "library": "lucide-react",
+      "rationale": "Clean, consistent, and pre-installed with Shadcn."
+    },
+    "image_urls": {
+      "hero_nurses": [
+        {
+          "url": "https://images.unsplash.com/photo-1584432810601-6c7f27d2362b?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzF8MHwxfHNlYXJjaHwxfHxhc2lhbiUyMG51cnNlJTIwaG9tZSUyMGNhcmV8ZW58MHx8fHwxNzg4MTM3MTAyfDA&ixlib=rb-4.1.0&q=85",
+          "category": "Hero Section",
+          "description": "Female nurse in uniform, representing trust and care."
+        },
+        {
+          "url": "https://images.unsplash.com/photo-1765896387387-0538bc9f997e?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzF8MHwxfHNlYXJjaHw0fHxhc2lhbiUyMG51cnNlJTIwaG9tZSUyMGNhcmV8ZW58MHx8fHwxNzg4MTM3MTAyfDA&ixlib=rb-4.1.0&q=85",
+          "category": "About/Service",
+          "description": "Nurse smiling with elderly patient in room."
+        }
+      ],
+      "elderly_care": [
+        {
+          "url": "https://images.unsplash.com/photo-1762955911431-4c44c7c3f408?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NTZ8MHwxfHNlYXJjaHwxfHxlbGRlcmx5JTIwY2FyZSUyMGF0JTIwaG9tZXxlbnwwfHx8fDE3ODgxMzcxMDJ8MA&ixlib=rb-4.1.0&q=85",
+          "category": "Services Overview",
+          "description": "Caregiver assisting elderly."
+        }
+      ],
+      "doctor_profiles": [
+        {
+          "url": "https://images.unsplash.com/photo-1622902046580-2b47f47f5471?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NjZ8MHwxfHNlYXJjaHwzfHxkb2N0b3IlMjBpbmRvbmVzaWFuJTIwcG9ydHJhaXR8ZW58MHx8fHwxNzg4MTM3MTEzfDA&ixlib=rb-4.1.0&q=85",
+          "category": "Provider Dashboard / Search Results",
+          "description": "Indonesian male doctor portrait."
+        },
+        {
+          "url": "https://images.unsplash.com/photo-1741868159744-159b83484687?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NjZ8MHwxfHNlYXJjaHwyfHxkb2N0b3IlMjBpbmRvbmVzaWFuJTIwcG9ydHJhaXR8ZW58MHx8fHwxNzg4MTM3MTEzfDA&ixlib=rb-4.1.0&q=85",
+          "category": "Provider Dashboard / Search Results",
+          "description": "Female doctor with stethoscope."
+        }
+      ]
+    }
+  },
+  "instructions_to_main_agent": [
+    "You are building a complex multi-role app (Patient, Nakes, Admin) for the Indonesian market. Text and labels must be in Bahasa Indonesia.",
+    "Use standard Shadcn components (Cards, Tables, Dialogs, Select, Forms) but customize their paddings and borders to fit the defined 'Flat solid surfaces' style.",
+    "Implement Google Login + Email auth UI (mocked logic or Firebase if instructed).",
+    "Implement QRIS, Cash, and Stripe payment mockups in the patient booking flow.",
+    "For the Nakes dashboard, the SOAP (Subjective, Objective, Assessment, Plan) and Vital Signs forms must be cleanly laid out using Shadcn Forms.",
+    "Avoid generic centered layouts. Use responsive grid configurations (grid-cols-1 md:grid-cols-2 lg:grid-cols-3) for service cards and provider lists.",
+    "Do not use HTML default <select> or <input type='date'>. Always use Shadcn Dropdown/Select and Calendar.",
+    "Add 'data-testid' to ALL interactive elements for automated testing."
+  ],
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "Do not converge toward generic 'AI slop' aesthetics. Avoid simplistic gradients and uniform styling.",
+    "Do not apply 'transition: all' globally. Explicitly define transitions.",
+    "Do not center align the root app container (no .App { text-align: center; }).",
+    "Never use placeholder URLs (via.placeholder.com). Use the curated Unsplash images provided in the guidelines.",
+    "Prioritize pre-existing components from src/components/ui.",
+    "Use sonner for toast notifications.",
+    "Ensure generous spacing to prevent cramped designs, especially on mobile devices."
+  ]
+}
