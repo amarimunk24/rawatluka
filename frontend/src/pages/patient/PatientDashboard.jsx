@@ -8,6 +8,7 @@ import DatePicker from "@/components/DatePicker";
 import MapView from "@/components/MapView";
 import AuthImage from "@/components/AuthImage";
 import BannerCarousel from "@/components/BannerCarousel";
+import { getAccurateLocation } from "@/lib/geo";
 import { StatusBadge, StarRating } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,7 +23,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import {
   Home, ClipboardList, FileHeart, UserCog, Search, MapPin, Star, MessageCircle,
-  Wallet, CalendarIcon, Loader2, Stethoscope, Clock, Printer, QrCode, Banknote, Download,
+  Wallet, CalendarIcon, Loader2, Stethoscope, Clock, Printer, QrCode, Banknote, Download, Navigation2,
 } from "lucide-react";
 
 const NAV = [
@@ -65,11 +66,13 @@ function SearchSection() {
   useEffect(() => { api.get("/services").then(({ data }) => setServices(data)); }, []);
 
   const useMyLocation = () => {
-    if (!navigator.geolocation) return toast.error("Geolokasi tidak didukung");
-    navigator.geolocation.getCurrentPosition(
-      (pos) => { setLat(pos.coords.latitude); setLng(pos.coords.longitude); toast.success("Lokasi diperbarui"); },
-      () => toast.error("Gagal mendapatkan lokasi")
-    );
+    toast.loading("Mencari lokasi GPS akurat...", { id: "geo" });
+    getAccurateLocation()
+      .then(({ lat: la, lng: ln, accuracy }) => {
+        setLat(Number(la.toFixed(6))); setLng(Number(ln.toFixed(6)));
+        toast.success(`Lokasi diperbarui (akurasi ±${Math.round(accuracy)}m)`, { id: "geo" });
+      })
+      .catch((e) => toast.error(e.message || "Gagal mendapatkan lokasi", { id: "geo" }));
   };
 
   const search = async () => {
@@ -131,7 +134,7 @@ function SearchSection() {
               center={[lat || JAKARTA.lat, lng || JAKARTA.lng]}
               markers={[
                 { lat: lat || JAKARTA.lat, lng: lng || JAKARTA.lng, type: "me", label: "Lokasi Anda" },
-                ...(results || []).filter((r) => r.latitude).map((r, i) => ({ lat: r.latitude + (i % 7) * 0.0006, lng: r.longitude + (i % 5) * 0.0006, type: "nakes", label: `${r.nama} • ${r.jarak_km} km` })),
+                ...(results || []).filter((r) => r.latitude).map((r) => ({ lat: r.latitude, lng: r.longitude, type: "nakes", label: `${r.nama} • ${r.jarak_km} km` })),
               ]}
               onPick={(la, ln) => { setLat(la); setLng(ln); }} />
           </div>
@@ -489,6 +492,16 @@ function ProfileSection() {
   const [loading, setLoading] = useState(false);
   const set = (k) => (e) => setForm({ ...form, [k]: e.target?.value ?? e });
 
+  const useGps = () => {
+    toast.loading("Mencari lokasi GPS akurat...", { id: "geo" });
+    getAccurateLocation()
+      .then(({ lat, lng, accuracy }) => {
+        setForm((prev) => ({ ...prev, latitude: lat.toFixed(6), longitude: lng.toFixed(6) }));
+        toast.success(`Lokasi diperbarui (akurasi ±${Math.round(accuracy)}m)`, { id: "geo" });
+      })
+      .catch((e) => toast.error(e.message || "Gagal mendapatkan lokasi", { id: "geo" }));
+  };
+
   const save = async () => {
     setLoading(true);
     try {
@@ -512,6 +525,11 @@ function ProfileSection() {
           </Select>
         </div>
         <div className="md:col-span-2"><Label>Alamat</Label><Textarea value={form.alamat} onChange={set("alamat")} className="mt-1.5 rounded-xl" /></div>
+        <div className="md:col-span-2">
+          <Button type="button" variant="outline" onClick={useGps} className="rounded-xl h-11 border-emerald-200 text-emerald-700 hover:bg-emerald-50" data-testid="patient-gps">
+            <Navigation2 className="h-4 w-4" /> Gunakan Lokasi Saya (GPS)
+          </Button>
+        </div>
         <div><Label>Latitude</Label><Input type="number" step="any" value={form.latitude} onChange={set("latitude")} className="mt-1.5 h-11 rounded-xl" /></div>
         <div><Label>Longitude</Label><Input type="number" step="any" value={form.longitude} onChange={set("longitude")} className="mt-1.5 h-11 rounded-xl" /></div>
         <div><Label>Kontak Darurat</Label><Input value={form.kontak_darurat} onChange={set("kontak_darurat")} className="mt-1.5 h-11 rounded-xl" /></div>

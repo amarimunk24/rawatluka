@@ -9,6 +9,7 @@ import FileUpload from "@/components/FileUpload";
 import AuthImage from "@/components/AuthImage";
 import MapView from "@/components/MapView";
 import BannerCarousel from "@/components/BannerCarousel";
+import { getAccurateLocation } from "@/lib/geo";
 import { StatusBadge, EmptyState } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -338,6 +339,16 @@ function Profile() {
   const [loading, setLoading] = useState(false);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
 
+  const useGps = () => {
+    toast.loading("Mencari lokasi GPS akurat...", { id: "geo" });
+    getAccurateLocation()
+      .then(({ lat, lng, accuracy }) => {
+        setF((prev) => ({ ...prev, latitude: lat.toFixed(6), longitude: lng.toFixed(6) }));
+        toast.success(`Lokasi diperbarui (akurasi ±${Math.round(accuracy)}m)`, { id: "geo" });
+      })
+      .catch((e) => toast.error(e.message || "Gagal mendapatkan lokasi", { id: "geo" }));
+  };
+
   const toggle = async (v) => { setOnline(v); await api.put("/nakes/status", { status_online: v }); toast.success(v ? "Anda sekarang online" : "Anda offline"); refresh(); };
   const save = async () => {
     setLoading(true);
@@ -361,6 +372,11 @@ function Profile() {
           <div><Label>Pengalaman (tahun)</Label><Input type="number" value={f.pengalaman_tahun} onChange={set("pengalaman_tahun")} className="mt-1.5 h-11 rounded-xl" /></div>
           <div className="md:col-span-2"><Label>Bio / Deskripsi</Label><Textarea value={f.deskripsi_bio} onChange={set("deskripsi_bio")} className="mt-1.5 rounded-xl" /></div>
           <div className="md:col-span-2"><Label>Alamat Praktik</Label><Textarea value={f.alamat} onChange={set("alamat")} className="mt-1.5 rounded-xl" /></div>
+          <div className="md:col-span-2">
+            <Button type="button" variant="outline" onClick={useGps} className="rounded-xl h-11 border-emerald-200 text-emerald-700 hover:bg-emerald-50" data-testid="nakes-gps">
+              <Navigation className="h-4 w-4" /> Gunakan Lokasi Saya (GPS)
+            </Button>
+          </div>
           <div><Label>Latitude</Label><Input type="number" step="any" value={f.latitude} onChange={set("latitude")} className="mt-1.5 h-11 rounded-xl" data-testid="nakes-lat" /></div>
           <div><Label>Longitude</Label><Input type="number" step="any" value={f.longitude} onChange={set("longitude")} className="mt-1.5 h-11 rounded-xl" data-testid="nakes-lng" /></div>
           <div className="md:col-span-2">
